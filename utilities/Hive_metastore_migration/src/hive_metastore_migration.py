@@ -10,13 +10,17 @@ import logging
 from time import localtime, strftime
 from types import MethodType
 from datetime import tzinfo, datetime, timedelta
+import math
+from datetime import datetime
 
 from pyspark.context import SparkContext, SparkConf
 from pyspark.sql import SQLContext, DataFrame, Row
-from pyspark.sql.functions import lit, struct, array, col, UserDefinedFunction, concat, monotonically_increasing_id, explode
+from pyspark.sql.functions import lit, struct, array, col, UserDefinedFunction, concat, monotonically_increasing_id, explode, coalesce
 from pyspark.sql.types import StringType, StructField, StructType, LongType, ArrayType, MapType, IntegerType, \
     FloatType, BooleanType
 
+
+CURRENT_TIMESTAMP = math.ceil(datetime.timestamp(datetime.now()))
 PYTHON_VERSION = sys.version_info[0]
 MYSQL_DRIVER_CLASS = 'com.mysql.jdbc.Driver'
 
@@ -945,7 +949,7 @@ class DataCatalogTransformer:
         ms_tbls_no_id = tables\
             .join(ms_dbs, tables.database == ms_dbs.NAME, 'inner')\
             .select(tables.database, tables.item, ms_dbs.DB_ID)\
-            .select('DB_ID', 'database', 'item.*')# database col needed for later
+            .select('DB_ID', 'database', 'item.*')
         ms_tbls = self.generate_id_df(ms_tbls_no_id, 'TBL_ID')
 
         return ms_tbls
@@ -956,7 +960,8 @@ class DataCatalogTransformer:
         import time
         create_timestamp = int(time.time() * 1.0)
         ms_tbls = ms_tbls.withColumn("createTime",lit(create_timestamp))
-        ms_tbls = DataCatalogTransformer.column_date_to_timestamp(ms_tbls, 'lastAccessTime')
+        ms_tbls = ms_tbls.drop("lastAccessTime").withColumn("lastAccessTime", lit(CURRENT_TIMESTAMP))
+#         ms_tbls = DataCatalogTransformer.column_date_to_timestamp(ms_tbls, 'lastAccessTime')
 
         ms_tbls = rename_columns(df=ms_tbls, rename_tuples=[
             ('database', 'DB_NAME'),
@@ -1005,8 +1010,10 @@ class DataCatalogTransformer:
 
     def reformat_partitions(self, ms_partitions):
         # reformat CREATE_TIME and LAST_ACCESS_TIME
-        ms_partitions = DataCatalogTransformer.column_date_to_timestamp(ms_partitions, 'creationTime')
-        ms_partitions = DataCatalogTransformer.column_date_to_timestamp(ms_partitions, 'lastAccessTime')
+#         ms_partitions = DataCatalogTransformer.column_date_to_timestamp(ms_partitions, 'creationTime')
+#         ms_partitions = DataCatalogTransformer.column_date_to_timestamp(ms_partitions, 'lastAccessTime')
+        ms_partitions = ms_partitions.withColumn('creationTime', lit(CURRENT_TIMESTAMP))
+        ms_partitions = ms_partitions.withColumn('lastAccessTime', lit(CURRENT_TIMESTAMP))
 
         ms_partitions = rename_columns(df=ms_partitions, rename_tuples=[
             ('creationTime', 'CREATE_TIME'),
